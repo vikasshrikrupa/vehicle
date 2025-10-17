@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vehicle PUCC Status & E-Challan</title>
+    <meta charset="UTF-8">
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f6f8fa; }
+        h1 { color: #227; }
+        .expired { background: #ffe0e0; border: 1px solid #d00; margin: 20px 0; padding: 15px; border-radius: 8px;}
+        .challan { margin-top: 10px; background: #fafafa; border: 1px dashed #999; padding: 10px; border-radius: 6px;}
+        .valid { background: #e0ffe0; border: 1px solid #090; margin: 10px 0; padding: 10px; border-radius: 6px;}
+        h2 { color: #333; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 15px;}
+        td, th { border: 1px solid #999; padding: 8px; text-align: left; }
+        th { background: #eee; }
+        .none { font-style: italic; color: #555; }
+    </style>
+</head>
+<body>
+    <h1>Vehicle PUCC Expiry and E-Challan Status</h1>
+    <div id="result">Loading data...</div>
+    <script>
+    // Set your current date when processing/challan logic:
+    const today = new Date('2025-10-17');
+    // Path to your CSV file (must be in same repo for Github Pages):
+    const csvFile = 'vehicle_data.csv';
+
+    Papa.parse(csvFile, {
+        header: true,
+        download: true,
+        complete: function(results) {
+            let data = results.data.filter(row => row['PUCC Valid Up To']); // filter blank
+            // Add a PUCC expired flag for filtering
+            data.forEach(row => {
+                let d = new Date(row['PUCC Valid Up To']);
+                // Parse date in DD-MMM-YYYY
+                if (isNaN(d)) {
+                    let parts = row['PUCC Valid Up To'].split('-');
+                    if (parts.length === 3) {
+                        d = new Date(parts[2], getMonthNum(parts[1]), parseInt(parts[0]));
+                    }
+                }
+                row.PUCC_expired = (!isNaN(d) && d < today);
+                row.PUCC_dt = d;
+            });
+
+            let expired = data.filter(row => row.PUCC_expired);
+            let valid = data.filter(row => !row.PUCC_expired);
+
+            // Show valid vehicles
+            let html = `<h2>Valid PUCC Vehicles</h2>`;
+            if (valid.length) {
+                html += `<table><tr><th>Vehicle Number</th><th>Owner Name</th><th>PUCC Valid Up To</th></tr>`;
+                html += valid.map(v => `<tr><td>${v['Vehicle Number']}</td><td>${v['Owner Name']}</td><td>${v['PUCC Valid Up To']}</td></tr>`).join('');
+                html += `</table>`;
+            } else {
+                html += `<div class='none'>No vehicles with valid PUCC.</div>`;
+            }
+
+            // Show expired vehicles with challan info
+            html += `<h2>Expired PUCC Vehicles & Challan</h2>`;
+            if (expired.length) {
+                html += expired.map(v => `
+                <div class='expired'>
+                    <strong>Vehicle No.: ${v['Vehicle Number']}</strong><br>
+                    Owner: ${v['Owner Name']}<br>
+                    PUCC Expired on: <span style="color:red">${v['PUCC Valid Up To']}</span>
+                    <div class='challan'>
+                        <strong>Maharashtra Traffic Police Challan:</strong><br>
+                        Challan No.: HSPCM19005830619<br>
+                        Violation Date & Time: 24-Sep-2019 12:36<br>
+                        License No.: NA<br>
+                        Payment Status: <span style='color:red'>Unpaid</span><br>
+                        Comp.Fee (Rs): 200<br>
+                        Challan Location: 17.9060...,73.9717...<br>
+                        Violation(s): Police manual signal violation<br>
+                        Fine: <b>200</b><br>
+                    </div>
+                </div>
+                `).join('');
+            } else {
+                html += `<div class='none'>No expired PUCC records found.</div>`;
+            }
+
+            document.getElementById('result').innerHTML = html;
+        }
+    });
+
+    function getMonthNum(mon) {
+        mon = mon.toLowerCase();
+        return ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(mon);
+    }
+    </script>
+</body>
+</html>
