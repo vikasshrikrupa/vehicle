@@ -1,25 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Vehicle PUCC Status & E-Challan</title>
+    <title>Vehicle Status & E-Challan</title>
     <meta charset="UTF-8">
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background: #f6f8fa;
-        }
+		font-family: Arial, sans-serif;
+		background: linear-gradient(135deg, #F8FFAE 0%, #43C6AC 100%);
+		min-height: 100vh;
+		margin: 0;
+		padding: 0;
+		}
         h1 {
-            color: #227;
-        }
+		color: #227;
+		text-align: center;
+		margin-top: 30px;
+		letter-spacing: 1px;
+		}
         .challan {
-            margin-top: 20px;
-            background: #fafafa;
-            border: 1px dashed #999;
-            padding: 15px;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px #eee;
-        }
+		margin: 24px auto;
+		max-width: 600px;
+		background: #e5f4fd; /* Soft blue */
+		border: 1.5px dashed #2986cc;
+		padding: 18px 24px;
+		border-radius: 10px;
+		box-shadow: 0 2px 8px #e0e5ec;
+		}
         .valid {
             background: #e0ffe0;
             border: 1px solid #090;
@@ -36,7 +43,7 @@
             margin-bottom: 15px;
         }
         td, th {
-            border: 1px solid #999;
+            border: 2px solid #999;
             padding: 8px;
             text-align: left;
         }
@@ -50,45 +57,96 @@
     </style>
 </head>
 <body>
-    <h1>Vehicle PUCC Expiry and E-Challan Status</h1>
+    <h1>Vehicle PUCC, Insurance Expiry and E-Challan Status</h1>
     <div id="result">Loading data...</div>
     <script>
-        // Set your current date when processing challan logic
-        const today = new Date("2025-10-17"); // change as needed
-        
-        // Path to your CSV file must be in same repo for Github Pages
-        const csvFile = "vehicle_data.csv";
-        
-        Papa.parse(csvFile, {
-            header: true,
-            download: true,
-            complete: function(results) {
-                const vehicles = results.data;
-                // Filter for PUCC expired vehicles
-                const expired = vehicles.filter(v => {
-                    let expiry = new Date(v["PUCC Valid Up To"]);
-                    return expiry < today;
-                });
-                let html = "";
-                if (expired.length === 0) {
-                    html = "<div class='none'>No expired vehicles found</div>";
-                } else {
-                    html = expired.map((v,i) => `
-                        <div class="challan">
-                            <strong>Maharashtra Traffic Police Challan:</strong><br>
-                            Challan No.: HSPCM190058306${i+10}<br>
-                            Vehicle No.: ${v["Vehicle Number"]}<br>
-                            Owner: ${v["Owner Name"]}<br>
-                            Violation(s): PUCC Expired on: ${v["PUCC Valid Up To"]}<br>
-                            Fine: 200<br>
-                            Payment Status: <span style="color: red;">Unpaid</span><br>
-                            Comp.Fee (Rs): 200<br>
-                        </div>
-                    `).join('');
+    // Set your current date when processing challan logic
+    const today = new Date("2025-10-17"); // change as needed
+
+    // Path to your CSV file must be in same repo for Github Pages
+    const csvFile = "vehicle_data.csv";
+
+    Papa.parse(csvFile, {
+        header: true,
+        download: true,
+        complete: function(results) {
+            const vehicles = results.data;
+            let challanList = [];
+            // For each vehicle, check for any expiries among 3 columns
+            vehicles.forEach((v, idx) => {
+                let violations = [];
+                let totalFine = 0;
+
+                // Check fitness
+                if (v['Fitness Valid Up To']) {
+                    let fitnessExpiry = new Date(v["Fitness Valid Up To"]);
+                    if (fitnessExpiry < today) {
+                        violations.push({
+                            label: 'Fitness Expired on: ' + v["Fitness Valid Up To"],
+                            fine: 300
+                        });
+                        totalFine += 300;
+                    }
                 }
-                document.getElementById('result').innerHTML = html;
+
+                // Check insurance
+                if (v['Insurance Valid Up To']) {
+                    let insuranceExpiry = new Date(v["Insurance Valid Up To"]);
+                    if (insuranceExpiry < today) {
+                        violations.push({
+                            label: 'Insurance Expired on: ' + v["Insurance Valid Up To"],
+                            fine: 500
+                        });
+                        totalFine += 500;
+                    }
+                }
+
+                // Check PUCC
+                if (v['PUCC Valid Up To']) {
+                    let puccExpiry = new Date(v["PUCC Valid Up To"]);
+                    if (puccExpiry < today) {
+                        violations.push({
+                            label: 'PUCC Expired on: ' + v["PUCC Valid Up To"],
+                            fine: 200
+                        });
+                        totalFine += 200;
+                    }
+                }
+
+                if (violations.length > 0) {
+                    challanList.push({
+                        challanNo: `HSPCM190058306${idx + 10}`,
+                        vehicleNo: v["Vehicle Number"],
+                        owner: v["Owner Name"],
+                        violations,
+                        totalFine
+                    });
+                }
+            });
+
+            let html = "";
+            if (challanList.length === 0) {
+                html = "<div class='none'>No violations found</div>";
+            } else {
+                html = challanList.map((c) => `
+                    <div class="challan">
+                        <strong>Maharashtra Traffic Police Challan:</strong><br>
+                        Challan No.: ${c.challanNo}<br>
+                        Vehicle No.: ${c.vehicleNo}<br>
+                        Owner: ${c.owner}<br>
+                        ${c.violations.map(vio => `
+                            Violation(s): ${vio.label}<br>
+                            Fine: ${vio.fine}<br>
+                        `).join('')}
+                        ${c.violations.length > 1 ? `<b>Total Fine: ${c.totalFine}</b><br>` : ""}
+                        Payment Status: <span style="color: red;">Unpaid</span><br>
+                    </div>
+                `).join('');
             }
-        });
-    </script>
+            document.getElementById('result').innerHTML = html;
+        }
+    });
+	</script>
+
 </body>
 </html>
